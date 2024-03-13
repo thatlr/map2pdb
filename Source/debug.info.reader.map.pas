@@ -46,6 +46,7 @@ implementation
 
 uses
   System.SysUtils,
+  System.IOUtils,
   System.Math;
 
 function DemangleMapSymbol(Module: TDebugInfoModule; const Name: string): string;
@@ -268,61 +269,64 @@ var
   function HexToInt16(const s: string; var Offset: integer): Word;
   begin
     Result := 0;
-    var FirstOffset := Offset + 1;
-    for var i := 1 to SizeOf(Result)*2 do
-      if (Offset < Length(s)) then
-      begin
-        var Nibble := HexToNibble(s[Offset+1]);
-        if (Nibble = $FF) then
-          LineLogger.Error(Reader.LineNumber, 'Invalid 16-bit hex number: "%s"', [Copy(s, FirstOffset, SizeOf(Result)*2)]);
+    var FirstOffset := Offset;
+    var i := SizeOf(Result) * 2;
+    while (i > 0) and (Offset < Length(s)) do
+    begin
+      var Nibble := HexToNibble(s[Offset+1]);
+      if (Nibble = $FF) then
+        break;
 
-        Result := (Result SHL 4) or Nibble;
-        Inc(Offset);
-      end else
-        LineLogger.Error(Reader.LineNumber, 'Invalid 16-bit hex number: "%s"', [Copy(s, FirstOffset, SizeOf(Result)*2)]);
+      Result := (Result SHL 4) or Nibble;
+      Inc(Offset);
+      Dec(i);
+    end;
+
+    if (Offset = FirstOffset) then
+      LineLogger.Error(Reader.LineNumber, 'Invalid %d-bit hex number: "%s"', [SizeOf(Result)*8, Copy(s, FirstOffset+1, SizeOf(Result)*2)]);
   end;
 
   function HexToInt32(const s: string; var Offset: integer): Cardinal;
   begin
     Result := 0;
-    var FirstOffset := Offset + 1;
-    for var i := 1 to SizeOf(Result)*2 do
-      if (Offset < Length(s)) then
-      begin
-        var Nibble := HexToNibble(s[Offset+1]);
-        if (Nibble = $FF) then
-          LineLogger.Error(Reader.LineNumber, 'Invalid 32-bit hex number: "%s"', [Copy(s, FirstOffset, SizeOf(Result)*2)]);
+    var FirstOffset := Offset;
+    var i := SizeOf(Result) * 2;
+    while (i > 0) and (Offset < Length(s)) do
+    begin
+      var Nibble := HexToNibble(s[Offset+1]);
+      if (Nibble = $FF) then
+        break;
 
-        Result := (Result SHL 4) or Nibble;
-        Inc(Offset);
-      end else
-        LineLogger.Error(Reader.LineNumber, 'Invalid 32-bit hex number: "%s"', [Copy(s, FirstOffset, SizeOf(Result)*2)]);
+      Result := (Result SHL 4) or Nibble;
+      Inc(Offset);
+      Dec(i);
+    end;
+
+    if (Offset = FirstOffset) then
+      LineLogger.Error(Reader.LineNumber, 'Invalid %d-bit hex number: "%s"', [SizeOf(Result)*8, Copy(s, FirstOffset+1, SizeOf(Result)*2)]);
   end;
 
   function HexToInt64(const s: string; var Offset: integer): Int64;
   begin
+    // Note:
+    // - We need to allow 32-bit hex value (Segment offset is 16 digits in map files
+    //   produced by Delphi 11.2, 8 digits in older versions)
     Result := 0;
-    var FirstOffset := Offset + 1;
-    for var i := 1 to SizeOf(Result)*2 do
-      if (Offset < Length(s)) then
-      begin
-        var Nibble := HexToNibble(s[Offset+1]);
-        if (Nibble = $FF) then
-        begin
-          // Allow 32-bit hex value (Segment offset is 16 digits in map files produced by Delphi 11.2, 8 digits in older versions)
-          if (i = SizeOf(Result)+1) then
-            break;
-          LineLogger.Error(Reader.LineNumber, 'Invalid 64-bit hex number: "%s"', [Copy(s, FirstOffset, SizeOf(Result)*2)]);
-        end;
+    var FirstOffset := Offset;
+    var i := SizeOf(Result) * 2;
+    while (i > 0) and (Offset < Length(s)) do
+    begin
+      var Nibble := HexToNibble(s[Offset+1]);
+      if (Nibble = $FF) then
+        break;
 
-        Result := (Result SHL 4) or Nibble;
-        Inc(Offset);
-      end else
-      begin
-        if (i = SizeOf(Result)+1) then
-          break;
-        LineLogger.Error(Reader.LineNumber, 'Invalid 64-bit hex number: "%s"', [Copy(s, FirstOffset, SizeOf(Result)*2)]);
-      end;
+      Result := (Result SHL 4) or Nibble;
+      Inc(Offset);
+      Dec(i);
+    end;
+
+    if (Offset = FirstOffset) then
+      LineLogger.Error(Reader.LineNumber, 'Invalid %d-bit hex number: "%s"', [SizeOf(Result)*8, Copy(s, FirstOffset+1, SizeOf(Result)*2)]);
   end;
 
   function DecToInt32(const s: string; var Offset: integer): integer;
@@ -364,7 +368,11 @@ begin
     *)
 
     Logger.Info('- Segments');
+    // Delphi:
     // " Start         Length     Name                   Class"
+    //
+    // C++ Builder:
+    // " Start Length Name Class"
     while (Reader.HasData) and (not Reader.CurrentLine(True).StartsWith('Start')) and (not Reader.LineBuffer.EndsWith('Class')) do
       Reader.NextLine(True);
 
@@ -376,10 +384,10 @@ begin
 
     // Delphi:
     // " 0001:00401000 000F47FCH .text                   CODE"
-    // " 0001:0000000000301000 001FD57CH .text                   CODE"
+    // " 0001:0000000000301000 001FD57CH .text           CODE"
     //
     // C++ Builder:
-    // " 0001:00401000 000212EF0H _TEXT                  CODE"
+    // " 0001:00401000 0009DF6A4H _TEXT                  CODE"
     while (not Reader.CurrentLine.IsEmpty) do
     begin
       var n: integer := 0;
@@ -389,7 +397,8 @@ begin
       var Offset: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);
 
       n := RequiredPos(' ', n+1, 'Missing address/segment delimiter');
-      var Size: TDebugInfoOffset := HexToInt32(Reader.LineBuffer, n);
+      // C++ Builder size is a 32-bit value specified with 9 hex digits so we need to read is as a 64-bit value
+      var Size: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);
 
       var n2 := Pos('.', Reader.LineBuffer, n+1);
       if (n2 = 0) then
@@ -486,20 +495,21 @@ begin
 
     // Delphi:
     // " 0001:00000000 0000F684 C=CODE     S=.text    G=(none)   M=System   ACBP=A9"
-    // " 0001:00000000 0001640C C=CODE     S=.text    G=(none)   M=System   ALIGN=4"
+    // " 0001:00000000 0001640C C=CODE     S=.text    G=(none)   M=System   ALIGN=4"    
     //
     // C++ Builder:
-    // " 0001:000035F4 0000014D C=CODE    S=_TEXT    G=(none)   M=C:\PROGRAM FILES (X86)\EMBARCADERO\STUDIO\23.0\LIB\WIN32C\DEBUG\C0W32W.OBJ ACBP=A9"
-    // " 0001:00003741 00000713 C=CODE    S=_TEXT    G=(none)   M=C:\PROGRAM FILES (X86)\EMBARCADERO\STUDIO\23.0\LIB\WIN32\DEBUG\RTL.BPI|Winapi.Windows.pas ACBP=A9"
+    // " 0001:000040C4 00000163 C=CODE    S=_TEXT    G=(none)   M=C:\PROGRAM FILES (X86)\EMBARCADERO\STUDIO\22.0\LIB\WIN32\RELEASE\C0FMX32W.OBJ ACBP=A9"
+    // " 0001:0002C4D8 0000551C C=CODE    S=_TEXT    G=(none)   M=C:\PROGRAM FILES (X86)\EMBARCADERO\STUDIO\22.0\LIB\WIN32\DEBUG\RTL.LIB|System.Types ACBP=A9"
+    // " 0002:00030048 00001228 C=DATA    S=_DATA    G=DGROUP   M=<internal> ACBP=A9"
     while (not Reader.CurrentLine.IsEmpty) do
     begin
-      var n := RequiredPos(' C=', 1, 'Missing class name marker');
-      var n2 := RequiredPos(' ', n+2, 'Missing segment type separator');
-      var ClassName := Copy(Reader.LineBuffer, n+2, n2-n-2);
-      var Address := Copy(Reader.LineBuffer, 1, n-1);
+      var ModulePos := RequiredPos(' C=', 1, 'Missing class name marker');
+      var n2 := RequiredPos(' ', ModulePos+2, 'Missing segment type separator');
+      var ClassName := Copy(Reader.LineBuffer, ModulePos+2, n2-ModulePos-2);
+      var Address := Copy(Reader.LineBuffer, 1, ModulePos-1);
 
-      n := RequiredPos('M=', n+3, 'Missing module name marker');
-      var StartOfName := n+2;
+      ModulePos := RequiredPos('M=', ModulePos+3, 'Missing module name marker');
+      var StartOfName := ModulePos+2;
       // Find last ' ALIGN=' on line
       n2 := StartOfName;
       var EndOfName: integer;
@@ -524,26 +534,35 @@ begin
         Dec(EndOfName);
       // Trim leading path
       n2 := EndOfName;
-      n := StartOfName;
+      ModulePos := StartOfName;
       while (n2 >= StartOfName) and (not CharInSet(Reader.LineBuffer[n2], ['\', '/', '|'])) do
       begin
-        n := n2;
+        ModulePos := n2;
         Dec(n2);
       end;
-      StartOfName := n;
+      StartOfName := ModulePos;
 
-      var Name := Copy(Reader.LineBuffer, StartOfName, EndOfName-StartOfName+1);
-      if (Name.IsEmpty) then
+      var IsPath := CharInSet(Reader.LineBuffer[n2], ['\', '/']);
+      var FilenameIsAlias := (Reader.LineBuffer[n2] = '|');
+
+      var ModuleName := Copy(Reader.LineBuffer, StartOfName, EndOfName-StartOfName+1);
+
+      // If we got a path delimiter then filename is likely an object file (C++ Builder); Get rid of the filetype.
+      // If we got a "|" then filename is an alias (C++ Builder); Get rid of the filetype.
+      if (not ModuleName.IsEmpty) and (IsPath or FilenameIsAlias) then
+        ModuleName := TPath.GetFileNameWithoutExtension(ModuleName);
+
+      if (ModuleName.IsEmpty) then
         LineLogger.Error(Reader.LineNumber, 'Invalid module name'#13#10'%s', [Reader.LineBuffer]);
 
-      n := 0;
-      var SegmentID: Cardinal := DecToInt32(Address, n);
+      ModulePos := 0;
+      var SegmentID: Cardinal := DecToInt32(Address, ModulePos);
 
-      n := RequiredPos(':', Address, n+1, 'Malformed module address');
-      var Offset: TDebugInfoOffset := HexToInt64(Address, n);
+      ModulePos := RequiredPos(':', Address, ModulePos+1, 'Malformed module address');
+      var Offset: TDebugInfoOffset := HexToInt64(Address, ModulePos);
 
-      n := RequiredPos(' ', Address, n+1, 'Missing module size separator');
-      var Size: TDebugInfoOffset := HexToInt32(Address, n);
+      ModulePos := RequiredPos(' ', Address, ModulePos+1, 'Missing module size separator');
+      var Size: TDebugInfoOffset := HexToInt32(Address, ModulePos);
       if (Size = 0) then
         LineLogger.Error(Reader.LineNumber, 'Invalid module size'#13#10'%s', [Reader.LineBuffer]);
 
@@ -560,15 +579,58 @@ begin
 
       // Look for existing module
       var Module := DebugInfo.Modules.FindOverlap(Segment, Offset, Size);
-      if (Module = nil) then
+      if (Module <> nil) then
       begin
-        // Add new module
-        if (Offset + Size <= Segment.Size) then
-          DebugInfo.Modules.Add(Name, Segment, Offset, Size)
-        else
-          LineLogger.Warning(Reader.LineNumber, 'Module exceed segment bounds - ignored: %s [%.4d:%.16X+%d]', [Name, SegmentID, Offset, Size]);
-      end else
-        LineLogger.Warning(Reader.LineNumber, 'Modules overlap: %s, %s'#13#10'%s', [Module.Name, Name, Reader.LineBuffer]);
+        LineLogger.Warning(Reader.LineNumber, 'Modules overlap: %s, %s'#13#10'%s', [ModuleName, Module.Name, Reader.LineBuffer]);
+        var Overlap := Module.Offset + Module.Size - Offset;
+        if (Overlap > 0) then
+        begin
+          // Existing module extends into this one. Move this one.
+          if (Size <= Overlap) then
+          begin
+            LineLogger.Warning(Reader.LineNumber, 'Unable to recover by moving module as module is too small. Module ignored: %s', [ModuleName]);
+            Size := 0;
+          end else
+          begin
+            LineLogger.Warning(Reader.LineNumber, 'Recovered by moving and shrinking module %d bytes', [Overlap]);
+            Offset := Offset + Overlap;
+            Size := Size - Overlap;
+          end;
+        end else
+        begin
+          // This module extends into existing module. Shrink this one.
+          if (Size <= -Overlap) then
+          begin
+            LineLogger.Warning(Reader.LineNumber, 'Unable to recover by moving module as module is too small. Module ignored: %s', [ModuleName]);
+            Size := 0;
+          end else
+          begin
+            LineLogger.Warning(Reader.LineNumber, 'Recovered by shrinking module %d bytes', [-Overlap]);
+            Size := Size + Overlap;
+          end;
+        end;
+
+        // If new module still overlap something we give up on it
+        if (Size > 0) then
+        begin
+          Module := DebugInfo.Modules.FindOverlap(Segment, Offset, Size);
+          if (Module <> nil) then
+          begin
+            LineLogger.Warning(Reader.LineNumber, 'Unable to recover from multiple module overlaps. New overlap: %s', [Module.Name]);
+            Size := 0;
+          end;
+        end;
+      end;
+
+      if (Size > 0) and (Offset + Size > Segment.Size) then
+      begin
+        LineLogger.Warning(Reader.LineNumber, 'Module exceed segment bounds - ignored: %s [%.4d:%.16X-%.16X] > [%.16X] > ', [ModuleName, SegmentID, Offset, Offset+Size, Segment.Size]);
+        Size := 0;
+      end;
+
+      // Add new module
+      if (Size > 0) then // Size = 0 if module has been ignored
+        DebugInfo.Modules.Add(ModuleName, Segment, Offset, Size);
 
       Reader.NextLine;
     end;
@@ -662,6 +724,7 @@ begin
 
 
     Logger.Info('- Line numbers');
+    var HasLineNumbers := False;
     // Rest of file is:
     // "Line numbers for System(WindowsAPIs.INC) segment .text"
     while (Reader.HasData) do
@@ -739,6 +802,7 @@ begin
                 Assert(Offset < Module.Size);
 
                 Module.SourceLines.Add(SourceFile, LineNumber, Offset);
+                HasLineNumbers := True;
               end else
               begin
                 // This is typically the last "end." of the unit. The offset corresponds to the start of the next module.
@@ -777,6 +841,10 @@ begin
       end;
 
     end;
+
+    if (not HasLineNumbers) then
+      LineLogger.Warning(Reader.LineNumber, 'Map file contained NO line number information');
+
 
   finally
     Reader.Free;

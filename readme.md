@@ -132,7 +132,7 @@ The following resources were used as references and inspiration during the devel
 
 ##### Performance problems with Intel VTune
 
-Due to a bug in the **msdia140.dll** file that comes bundled with some versions of VTune you can experience that VTune takes an extremely long time to resolve symbols on anything but the smallest projects.
+Due to a bug in the **msdia140.dll** file that comes bundled with some older versions of VTune you can experience that VTune takes an extremely long time to resolve symbols on anything but the smallest projects.
 
 msdia140.dll implements the [Debug Interface Access SDK](https://docs.microsoft.com/en-us/visualstudio/debugger/debug-interface-access/debug-interface-access-sdk?view=vs-2019). The bug was introduced in VS2017 and supposedly fixed in VS2019 but apparently, it took a while for Intel to discover that so they continued shipping the old VS2017 version of msdia140.dll.
 
@@ -140,7 +140,7 @@ To fix this problem (if you have it) all you have to do is replace VTune's msdia
 
 Now here's the catch; The files you need to replace are not the ones that are actually named msdia140.dll. You need to replace the ones named **amplxe_msdia140.dll**. Remember to save the old ones first in case you mess this up.
 
-If you have a newer version of VS installed you can probably find the required files somewhere on your system. I guess anything newer than version 14.10.x.x should do. You can also install the [Visual Studio Redistributable](https://visualstudio.microsoft.com/downloads/#microsoft-visual-c-redistributable-for-visual-studio-2019) and get the files from there or you can just get the two files from the [repository download section](https://bitbucket.org/anders_melander/map2pdb/downloads/).
+If you have a newer version of VS installed you can probably find the required files somewhere on your system. I guess anything newer than version 14.10.x.x should do. You can also install the [Visual Studio Redistributable](https://visualstudio.microsoft.com/downloads/#microsoft-visual-c-redistributable-for-visual-studio-2019) and get the files from there or you can just get the two files from the [old repository download section](https://bitbucket.org/anders_melander/map2pdb/downloads/).
 
 ### Building map2pdb from source
 
@@ -150,8 +150,9 @@ To build map2pdb just open `map2pdb.dproj` in Delphi, build and you're done.
 
 ### Download
 
-A precompiled map2pdb.exe can be downloaded here: https://bitbucket.org/anders_melander/map2pdb/downloads/  
+A precompiled map2pdb.exe can be downloaded here: https://github.com/andersmelander/map2pdb/releases  
 It has been virus scanned locally with Kaspersky and remotely with [VirusTotal](https://www.virustotal.com).
+Note that some anti-virus programs regularly flags map2pdb as a threat due to the fact that it contains code to modify a PE file. There's not much I can do about this.
 
 ### License
 

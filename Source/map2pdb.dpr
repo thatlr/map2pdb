@@ -23,6 +23,7 @@ uses
   System.Diagnostics,
   System.Generics.Collections,
   System.StrUtils,
+  amVersionInfo,
   debug.info in 'debug.info.pas',
   debug.info.writer in 'debug.info.writer.pas',
   debug.info.writer.pdb in 'debug.info.writer.pdb.pas',
@@ -63,7 +64,7 @@ end;
 procedure DisplayBanner;
 begin
   Writeln('map2pdb - Copyright (c) 2021 Anders Melander');
-  Writeln('Version 3.1.2');
+  Writeln(Format('Version %s', [TVersionInfo.FileVersionString(ParamStr(0))]));
   Writeln;
 end;
 

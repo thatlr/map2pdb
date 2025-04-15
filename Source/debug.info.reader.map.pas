@@ -341,6 +341,18 @@ var
       LineLogger.Error(Reader.LineNumber, 'Invalid integer number: "%s"', [Copy(s, Offset+1, MaxInt)]);
   end;
 
+  function RequiredPos(const SubStr, Str: string; Offset: integer; const ErrorMsg: string): integer; overload;
+  begin
+    Result := Pos(SubStr, Str, Offset);
+    if (Result = 0) then
+      LineLogger.Error(Reader.LineNumber, ErrorMsg+#13#10+Reader.LineBuffer);
+  end;
+
+  function RequiredPos(const SubStr: string; Offset: integer; const ErrorMsg: string): integer; overload;
+  begin
+    Result := RequiredPos(SubStr, Reader.LineBuffer, Offset, ErrorMsg);
+  end;
+
 begin
   Logger.Info('Reading MAP file');
 
@@ -362,22 +374,32 @@ begin
 
     var LegacyMapFile := False;
 
+    // Delphi:
     // " 0001:00401000 000F47FCH .text                   CODE"
+    // " 0001:0000000000301000 001FD57CH .text                   CODE"
+    //
+    // C++ Builder:
+    // " 0001:00401000 000212EF0H _TEXT                  CODE"
     while (not Reader.CurrentLine.IsEmpty) do
     begin
       var n: integer := 0;
       var SegmentID: Cardinal := DecToInt32(Reader.LineBuffer, n);
 
-      n := Pos(':', Reader.LineBuffer, n+1);
+      n := RequiredPos(':', n+1, 'Missing address/segment separator');
       var Offset: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);
 
-      n := Pos(' ', Reader.LineBuffer, n+1);
+      n := RequiredPos(' ', n+1, 'Missing address/segment delimiter');
       var Size: TDebugInfoOffset := HexToInt32(Reader.LineBuffer, n);
 
-      n := Pos('.', Reader.LineBuffer, n+1);
-      var n2 := Pos(' ', Reader.LineBuffer, n+1);
-      var Name := Copy(Reader.LineBuffer, n, n2-n);
-      if (Name.IsEmpty) then
+      var n2 := Pos('.', Reader.LineBuffer, n+1);
+      if (n2 = 0) then
+        n2 := Pos('_', Reader.LineBuffer, n+1);
+      if (n2 = 0) then
+        LineLogger.Error(Reader.LineNumber, 'Missing segment name'#13#10'%s', [Reader.LineBuffer]);
+      n := n2;
+      n2 := RequiredPos(' ', n+1, 'Missing segment delimiter');
+      var SegmentName := Copy(Reader.LineBuffer, n, n2-n);
+      if (SegmentName.IsEmpty) then
         LineLogger.Error(Reader.LineNumber, 'Invalid segment name'#13#10'%s', [Reader.LineBuffer]);
 
       var ClassName := Copy(Reader.LineBuffer, n2+1, MaxInt).Trim;
@@ -398,29 +420,29 @@ begin
         if (ConflictingSegment <> nil) then
         begin
           LineLogger.Warning(Reader.LineNumber, 'Overlapping segments: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
-            [Name, SegmentID, Offset, ConflictingSegment.Name, ConflictingSegment.Index, ConflictingSegment.Offset]);
+            [SegmentName, SegmentID, Offset, ConflictingSegment.Name, ConflictingSegment.Index, ConflictingSegment.Offset]);
           // Calculate a bogus offset so we can get on with it
           for var Segment in DebugInfo.Segments do
             Offset := Max(Offset, Segment.Offset + Segment.Size);
           // Align to $1000
           Offset := (Offset + $0FFF) and (not $0FFF);
-          LineLogger.Warning(Reader.LineNumber, 'Calculated segment offset assigned: %s [%.4X:%.16X]', [Name, SegmentID, Offset]);
+          LineLogger.Warning(Reader.LineNumber, 'Calculated segment offset assigned: %s [%.4X:%.16X]', [SegmentName, SegmentID, Offset]);
         end;
 
         ConflictingSegment := DebugInfo.Segments.FindByIndex(SegmentID);
         if (ConflictingSegment <> nil) then
         begin
           LineLogger.Warning(Reader.LineNumber, 'Duplicate segment index: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
-            [Name, SegmentID, Offset, ConflictingSegment.Name, ConflictingSegment.Index, ConflictingSegment.Offset]);
+            [SegmentName, SegmentID, Offset, ConflictingSegment.Name, ConflictingSegment.Index, ConflictingSegment.Offset]);
           // Calculate a bogus index
           for var Segment in DebugInfo.Segments do
             SegmentID := Max(SegmentID, Segment.Index+1);
-          LineLogger.Warning(Reader.LineNumber, 'Calculated segment index assigned: %s [%.4X:%.16X]', [Name, SegmentID, Offset]);
+          LineLogger.Warning(Reader.LineNumber, 'Calculated segment index assigned: %s [%.4X:%.16X]', [SegmentName, SegmentID, Offset]);
         end;
       end;
 
       var SegmentClass := TDebugInfoSegment.GuessClassType(ClassName);
-      var Segment := DebugInfo.Segments.Add(SegmentID, Name, SegmentClass);
+      var Segment := DebugInfo.Segments.Add(SegmentID, SegmentName, SegmentClass);
 
       Segment.Offset := Offset;
       Segment.Size := Size;
@@ -433,7 +455,7 @@ begin
       //   "0005:00000000       OtlCommon.Utils.LastThreadName"
       //   "0005:00000100       SysInit.TlsLast"
       if (Size = 0) then
-        LineLogger.Warning(Reader.LineNumber, 'Empty segment: %s [%.4d:%.16X]', [Name, SegmentID, Segment.Offset]);
+        LineLogger.Warning(Reader.LineNumber, 'Empty segment: %s [%.4d:%.16X]', [SegmentName, SegmentID, Segment.Offset]);
 
       // Check for non-fatal overlapping segments (specifically .tls):
       //   "0001:0000000000401000 006CD7B8H .text                   CODE"
@@ -462,25 +484,65 @@ begin
     if (Reader.NextLine(True).IsEmpty) then
       Exit;
 
+    // Delphi:
     // " 0001:00000000 0000F684 C=CODE     S=.text    G=(none)   M=System   ACBP=A9"
+    // " 0001:00000000 0001640C C=CODE     S=.text    G=(none)   M=System   ALIGN=4"
+    //
+    // C++ Builder:
+    // " 0001:000035F4 0000014D C=CODE    S=_TEXT    G=(none)   M=C:\PROGRAM FILES (X86)\EMBARCADERO\STUDIO\23.0\LIB\WIN32C\DEBUG\C0W32W.OBJ ACBP=A9"
+    // " 0001:00003741 00000713 C=CODE    S=_TEXT    G=(none)   M=C:\PROGRAM FILES (X86)\EMBARCADERO\STUDIO\23.0\LIB\WIN32\DEBUG\RTL.BPI|Winapi.Windows.pas ACBP=A9"
     while (not Reader.CurrentLine.IsEmpty) do
     begin
-      var n := Pos(' C=', Reader.LineBuffer);
-      var ClassName := Copy(Reader.LineBuffer, n+2, Pos(' ', Reader.LineBuffer, n+2)-n-2);
+      var n := RequiredPos(' C=', 1, 'Missing class name marker');
+      var n2 := RequiredPos(' ', n+2, 'Missing segment type separator');
+      var ClassName := Copy(Reader.LineBuffer, n+2, n2-n-2);
       var Address := Copy(Reader.LineBuffer, 1, n-1);
 
-      n := Pos('M=', Reader.LineBuffer);
-      var Name := Copy(Reader.LineBuffer, n+2, Pos(' ', Reader.LineBuffer, n+2)-n-2);
+      n := RequiredPos('M=', n+3, 'Missing module name marker');
+      var StartOfName := n+2;
+      // Find last ' ALIGN=' on line
+      n2 := StartOfName;
+      var EndOfName: integer;
+      repeat
+        EndOfName := n2;
+        n2 := Pos(' ALIGN=', Reader.LineBuffer, n2+1);
+      until (n2 = 0);
+      // No "ALIGN"? Find last ' ACBP' on line instead
+      if (EndOfName = StartOfName) then
+      begin
+        n2 := StartOfName;
+        repeat
+          EndOfName := n2;
+          n2 := Pos(' ACBP=', Reader.LineBuffer, n2+1);
+        until (n2 = 0);
+      end;
+      if (EndOfName = StartOfName) then
+        LineLogger.Error(Reader.LineNumber, 'Missing module ALIGN/ACBP marker'#13#10'%s', [Reader.LineBuffer]);
+
+      // Trim trailing space
+      while (EndOfName > StartOfName) and (Reader.LineBuffer[EndOfName] = ' ') do
+        Dec(EndOfName);
+      // Trim leading path
+      n2 := EndOfName;
+      n := StartOfName;
+      while (n2 >= StartOfName) and (not CharInSet(Reader.LineBuffer[n2], ['\', '/', '|'])) do
+      begin
+        n := n2;
+        Dec(n2);
+      end;
+      StartOfName := n;
+
+      var Name := Copy(Reader.LineBuffer, StartOfName, EndOfName-StartOfName+1);
       if (Name.IsEmpty) then
         LineLogger.Error(Reader.LineNumber, 'Invalid module name'#13#10'%s', [Reader.LineBuffer]);
 
       n := 0;
       var SegmentID: Cardinal := DecToInt32(Address, n);
 
-      n := Pos(':', Address, n+1);
+      n := RequiredPos(':', Address, n+1, 'Malformed module address');
       var Offset: TDebugInfoOffset := HexToInt64(Address, n);
 
-      n := Pos(' ', Address, n+1);
+      n := RequiredPos(' ', Address, n+1, 'Missing module size separator');
       var Size: TDebugInfoOffset := HexToInt32(Address, n);
       if (Size = 0) then
         LineLogger.Error(Reader.LineNumber, 'Invalid module size'#13#10'%s', [Reader.LineBuffer]);
@@ -498,14 +560,15 @@ begin
 
       // Look for existing module
       var Module := DebugInfo.Modules.FindOverlap(Segment, Offset, Size);
-      if (Module <> nil) then
-        LineLogger.Error(Reader.LineNumber, 'Modules overlap: %s, %s'#13#10'%s', [Module.Name, Name, Reader.LineBuffer]);
-
-      // Add new module
-      if (Offset + Size <= Segment.Size) then
-        DebugInfo.Modules.Add(Name, Segment, Offset, Size)
-      else
-        LineLogger.Warning(Reader.LineNumber, 'Module exceed segment bounds - ignored: %s [%.4d:%.16X+%d]', [Name, SegmentID, Offset, Size]);
+      if (Module = nil) then
+      begin
+        // Add new module
+        if (Offset + Size <= Segment.Size) then
+          DebugInfo.Modules.Add(Name, Segment, Offset, Size)
+        else
+          LineLogger.Warning(Reader.LineNumber, 'Module exceed segment bounds - ignored: %s [%.4d:%.16X+%d]', [Name, SegmentID, Offset, Size]);
+      end else
+        LineLogger.Warning(Reader.LineNumber, 'Modules overlap: %s, %s'#13#10'%s', [Module.Name, Name, Reader.LineBuffer]);
 
       Reader.NextLine;
     end;
@@ -610,19 +673,13 @@ begin
       if (not Reader.HasData) then
         break;
 
-      var n := Pos('(', Reader.LineBuffer);
-      if (n = 0) then
-        LineLogger.Error(Reader.LineNumber, 'Source file start marker "(" not found'#13#10'%s', [Reader.LineBuffer]);
+      var n := RequiredPos('(', 1, 'Source file start marker "(" not found');
       var ModuleName := Copy(Reader.LineBuffer, Length(sPrefix)+1, n-1-Length(sPrefix));
 
-      var n2 := Pos(')', Reader.LineBuffer, n+1);
-      if (n2 = 0) then
-        LineLogger.Error(Reader.LineNumber, 'Source file end marker ")" not found'#13#10'%s', [Reader.LineBuffer]);
+      var n2 := RequiredPos(')', n+1, 'Source file end marker ")" not found');
       var Filename := Copy(Reader.LineBuffer, n+1, n2-n-1);
 
-      n := Pos('segment', Reader.LineBuffer, n2+1);
-      if (n = 0) then
-        LineLogger.Error(Reader.LineNumber, 'Source file segment marker "segment" not found'#13#10'%s', [Reader.LineBuffer]);
+      n := RequiredPos('segment', n2+1, 'Source file segment marker "segment" not found');
       Inc(n, 7);
       while (Reader.LineBuffer[n] = ' ') do
         Inc(n);

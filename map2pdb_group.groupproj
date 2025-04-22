@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{95A1DADA-3CBA-483D-A3F3-B75EC77F8223}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Source\map2pdb.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Test\Source\map2pdb_test.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="map2pdb">
+        <MSBuild Projects="Source\map2pdb.dproj"/>
+    </Target>
+    <Target Name="map2pdb:Clean">
+        <MSBuild Projects="Source\map2pdb.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="map2pdb:Make">
+        <MSBuild Projects="Source\map2pdb.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="map2pdb_test">
+        <MSBuild Projects="Test\Source\map2pdb_test.dproj"/>
+    </Target>
+    <Target Name="map2pdb_test:Clean">
+        <MSBuild Projects="Test\Source\map2pdb_test.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="map2pdb_test:Make">
+        <MSBuild Projects="Test\Source\map2pdb_test.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="map2pdb;map2pdb_test"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="map2pdb:Clean;map2pdb_test:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="map2pdb:Make;map2pdb_test:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

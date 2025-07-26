@@ -40,6 +40,25 @@ type
 
 implementation
 
+uses
+  System.SysUtils;
+
+type
+  // TSafeMemoryStream: A memory stream that clears the allocated memory
+  // in order to avoid writing junk to the pdb file.
+  TSafeMemoryStream = class(TMemoryStream)
+  protected
+    function Realloc(var NewCapacity: NativeInt): Pointer; override;
+  end;
+
+function TSafeMemoryStream.Realloc(var NewCapacity: NativeInt): Pointer;
+begin
+  Result := inherited Realloc(NewCapacity);
+
+  if (NewCapacity > Capacity) then
+    FillChar((PByte(Result) + Capacity)^, NewCapacity - Capacity, 0);
+end;
+
 constructor TDebugInfoWriter.Create(ABlockSize: Cardinal);
 begin
   inherited Create;
@@ -51,7 +70,7 @@ begin
   try
 
 {$ifdef SAVE_MEMSTREAM}
-    var Stream := TMemoryStream.Create;
+    var Stream := TSafeMemoryStream.Create;
 {$else SAVE_MEMSTREAM}
     var Stream := TBufferedFileStream.Create(Filename, fmCreate, $8000);
 {$endif SAVE_MEMSTREAM}

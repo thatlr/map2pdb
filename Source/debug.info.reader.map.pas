@@ -391,7 +391,7 @@ begin
     while (not Reader.CurrentLine.IsEmpty) do
     begin
       var n: integer := 0;
-      var SegmentID: Cardinal := DecToInt32(Reader.LineBuffer, n);
+      var SegmentID: Cardinal := HexToInt32(Reader.LineBuffer, n);
 
       n := RequiredPos(':', n+1, 'Missing address/segment separator');
       var Offset: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);

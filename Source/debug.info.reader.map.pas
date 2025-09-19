@@ -390,10 +390,10 @@ begin
     // " 0001:00401000 0009DF6A4H _TEXT                  CODE"
     while (not Reader.CurrentLine.IsEmpty) do
     begin
-	  var n: integer := 0;
-	  var SegmentID: Cardinal := HexToInt32(Reader.LineBuffer, n);
+      var n: integer := 0;
+      var SegmentID: Cardinal := HexToInt32(Reader.LineBuffer, n);
 
-	  n := RequiredPos(':', n+1, 'Missing address/segment separator');
+      n := RequiredPos(':', n+1, 'Missing address/segment separator');
       var Offset: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);
 
       n := RequiredPos(' ', n+1, 'Missing address/segment delimiter');
@@ -448,37 +448,37 @@ begin
             SegmentID := Max(SegmentID, Segment.Index+1);
           LineLogger.Warning(Reader.LineNumber, 'Calculated segment index assigned: %s [%.4X:%.16X]', [SegmentName, SegmentID, Offset]);
         end;
-	  end;
+      end;
 
-	  if Size <> 0 then begin
+      if Size <> 0 then begin
 
-		var SegmentClass := TDebugInfoSegment.GuessClassType(ClassName);
-		var Segment := DebugInfo.Segments.Add(SegmentID, SegmentName, SegmentClass);
+        var SegmentClass := TDebugInfoSegment.GuessClassType(ClassName);
+        var Segment := DebugInfo.Segments.Add(SegmentID, SegmentName, SegmentClass);
 
-		Segment.Offset := Offset;
-		Segment.Size := Size;
-		Segment.SegClassName := ClassName;
+        Segment.Offset := Offset;
+        Segment.Size := Size;
+        Segment.SegClassName := ClassName;
 
-		// We previously ignored empty segments. E.g.:
-		//   "0005:00000000 00000000H .tls                    TLS"
-		//   "0006:00400000 00000000H .pdata                  PDATA"
-		// but we need to allow them so symbols or lines referencing the segments doesn't cause errors. E.g.:
-		//   "0005:00000000       OtlCommon.Utils.LastThreadName"
-		//   "0005:00000100       SysInit.TlsLast"
-		if (Size = 0) then
-		  LineLogger.Warning(Reader.LineNumber, 'Empty segment: %s [%.4d:%.16X]', [SegmentName, SegmentID, Segment.Offset]);
+        // We previously ignored empty segments. E.g.:
+        //   "0005:00000000 00000000H .tls                    TLS"
+        //   "0006:00400000 00000000H .pdata                  PDATA"
+        // but we need to allow them so symbols or lines referencing the segments doesn't cause errors. E.g.:
+        //   "0005:00000000       OtlCommon.Utils.LastThreadName"
+        //   "0005:00000100       SysInit.TlsLast"
+        if (Size = 0) then
+          LineLogger.Warning(Reader.LineNumber, 'Empty segment: %s [%.4d:%.16X]', [SegmentName, SegmentID, Segment.Offset]);
 
-		// Check for non-fatal overlapping segments (specifically .tls):
-		//   "0001:0000000000401000 006CD7B8H .text                   CODE"
-		//   "0004:0000000000400000 00008260H .tls                    TLS"
-		// Fatal overlaps have already been checked when we assigned Segment.Offset above.
-		var OverlappingSegment := Segment.FindOverlap;
+        // Check for non-fatal overlapping segments (specifically .tls):
+        //   "0001:0000000000401000 006CD7B8H .text                   CODE"
+        //   "0004:0000000000400000 00008260H .tls                    TLS"
+        // Fatal overlaps have already been checked when we assigned Segment.Offset above.
+        var OverlappingSegment := Segment.FindOverlap;
 
-		if (OverlappingSegment <> nil) then
-		  LineLogger.Warning(Reader.LineNumber, 'Overlapping segments: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
-			[Segment.Name, Segment.Index, Segment.Offset, OverlappingSegment.Name, OverlappingSegment.Index, OverlappingSegment.Offset]);
+        if (OverlappingSegment <> nil) then
+          LineLogger.Warning(Reader.LineNumber, 'Overlapping segments: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
+            [Segment.Name, Segment.Index, Segment.Offset, OverlappingSegment.Name, OverlappingSegment.Index, OverlappingSegment.Offset]);
 
-	  end;
+      end;
 
       Reader.NextLine;
     end;

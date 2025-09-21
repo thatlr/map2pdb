@@ -356,6 +356,19 @@ var
   begin
     Result := RequiredPos(SubStr, Reader.LineBuffer, Offset, ErrorMsg);
   end;
+  
+  function ParseSegAndOffset(const Str: string; var StrOfs: integer; out SegmentID: Cardinal; out Offset: TDebugInfoOffset): boolean;
+  begin
+    SegmentID := HexToInt32(Str, StrOfs);
+    inc(StrOfs);
+    if (Length(Str) < StrOfs) or (Str[StrOfs] <> ':') then begin
+      LineLogger.Error(Reader.LineNumber, 'Missing address/segment separator'+#13#10+Str);
+      Offset := 0;
+      exit(false);
+    end;
+    Offset := HexToInt64(Str, StrOfs);
+    exit(true);
+  end;
 
 begin
   Logger.Info('Reading MAP file');
@@ -391,10 +404,10 @@ begin
     while (not Reader.CurrentLine.IsEmpty) do
     begin
       var n: integer := 0;
-      var SegmentID: Cardinal := HexToInt32(Reader.LineBuffer, n);
+	  var SegmentID: Cardinal;
+	  var Offset: TDebugInfoOffset;
 
-      n := RequiredPos(':', n+1, 'Missing address/segment separator');
-      var Offset: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);
+	  ParseSegAndOffset(Reader.LineBuffer, n, SegmentID, Offset);
 
       n := RequiredPos(' ', n+1, 'Missing address/segment delimiter');
       // C++ Builder size is a 32-bit value specified with 9 hex digits so we need to read is as a 64-bit value
@@ -560,10 +573,10 @@ begin
         LineLogger.Error(Reader.LineNumber, 'Invalid module name'#13#10'%s', [Reader.LineBuffer]);
 
       ModulePos := 0;
-      var SegmentID: Cardinal := DecToInt32(Address, ModulePos);
+      var SegmentID: Cardinal;
+      var Offset: TDebugInfoOffset;
 
-      ModulePos := RequiredPos(':', Address, ModulePos+1, 'Malformed module address');
-      var Offset: TDebugInfoOffset := HexToInt64(Address, ModulePos);
+	  ParseSegAndOffset(Address, ModulePos, SegmentID, Offset);
 
       ModulePos := RequiredPos(' ', Address, ModulePos+1, 'Missing module size separator');
       var Size: TDebugInfoOffset := HexToInt32(Address, ModulePos);
@@ -666,10 +679,10 @@ begin
         LineLogger.Error(Reader.LineNumber, 'Invalid symbol name'#13#10'%s', [Reader.LineBuffer]);
 
       n := 0;
-      var SegmentID: Cardinal := DecToInt32(Address, n);
+      var SegmentID: Cardinal;
+      var Offset: TDebugInfoOffset;
 
-      n := Pos(':', Address, n+1);
-      var Offset: TDebugInfoOffset := HexToInt64(Address, n);
+	  ParseSegAndOffset(Address, n, SegmentID, Offset);
 
       var Segment := DebugInfo.Segments.FindByIndex(SegmentID);
       if (Segment = nil) then
@@ -779,13 +792,13 @@ begin
             Inc(n); // Skip ' '
 
             // Get segment index (we already have that info from the header)
-            var SegmentID: Cardinal := DecToInt32(Reader.LineBuffer, n);
+            var SegmentID: Cardinal;
+			var Offset: TDebugInfoOffset;
+
+            ParseSegAndOffset(Reader.LineBuffer, n, SegmentID, Offset);
+
             if (SegmentID <> Segment.Index) then
               LineLogger.Error(Reader.LineNumber, 'Segment mismatch. Module segment:%d (%s), Line segment:%d'#13#10'%s', [Segment.Index, Segment.Name, SegmentID, Reader.LineBuffer]);
-            Inc(n); // Skip ':'
-
-            // Get offset
-            var Offset: TDebugInfoOffset := HexToInt64(Reader.LineBuffer, n);
 
             // Ignore line numbers with offset=0
             if (Offset <> 0) then

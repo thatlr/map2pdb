@@ -9,13 +9,19 @@ uses
   debug.info.reader;
 
 type
-  TTestFileReader = class(TFileTestCase)
+  TCustomMapTest = class(TFileTestCase)
   strict private
     FDebugInfo: TDebugInfo;
   private
+  protected
+    procedure DoLoadFromFile;
+    procedure ProcessDebugInfo(DebugInfo: TDebugInfo); virtual;
   public
     procedure SetUp; override;
     procedure TearDown; override;
+  end;
+
+  TTestFileReader = class(TCustomMapTest)
   published
     procedure TestLoadFromFile;
   end;
@@ -48,18 +54,18 @@ begin
   Result := False;
 end;
 
-procedure TTestFileReader.SetUp;
+procedure TCustomMapTest.SetUp;
 begin
   FDebugInfo := TDebugInfo.Create;
 end;
 
-procedure TTestFileReader.TearDown;
+procedure TCustomMapTest.TearDown;
 begin
   FDebugInfo.Free;
   FDebugInfo := nil;
 end;
 
-procedure TTestFileReader.TestLoadFromFile;
+procedure TCustomMapTest.DoLoadFromFile;
 begin
   (*
   ** Determine source file format
@@ -87,10 +93,20 @@ begin
     Reader.Free;
   end;
 
-  Check(FDebugInfo.Segments.Count > 0, 'No segments');
-  Check(FDebugInfo.Modules.Count > 0, 'No modules');
-  if (FDebugInfo.SourceFiles.Count = 0) then
+  ProcessDebugInfo(FDebugInfo);
+end;
+
+procedure TCustomMapTest.ProcessDebugInfo(DebugInfo: TDebugInfo);
+begin
+  Check(DebugInfo.Segments.Count > 0, 'No segments');
+  Check(DebugInfo.Modules.Count > 0, 'No modules');
+  if (DebugInfo.SourceFiles.Count = 0) then
     Self.Status('No source files');
+end;
+
+procedure TTestFileReader.TestLoadFromFile;
+begin
+  DoLoadFromFile;
 end;
 
 

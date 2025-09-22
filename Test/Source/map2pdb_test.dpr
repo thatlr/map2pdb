@@ -21,7 +21,8 @@ uses
   DUnitTestRunner,
   Forms,
   TestFileReader in 'TestFileReader.pas',
-  FileTestFramework in '..\DUnit\FileTestFramework.pas';
+  FileTestFramework in '..\DUnit\FileTestFramework.pas',
+  TestFileWriter in 'TestFileWriter.pas';
 
 {$R *.RES}
 

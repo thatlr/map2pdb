@@ -121,6 +121,7 @@
         </DelphiCompile>
         <DCCReference Include="TestFileReader.pas"/>
         <DCCReference Include="..\DUnit\FileTestFramework.pas"/>
+        <DCCReference Include="TestFileWriter.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

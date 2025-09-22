@@ -78,7 +78,7 @@ type
 
   TDebugInfoSegments = class
   private
-    FSegments: TObjectList<TDebugInfoSegment>;
+    FSegments: TDictionary<Cardinal, TDebugInfoSegment>;
     FNames: TDictionary<string, TDebugInfoSegment>;
   protected
     function GetCount: integer;
@@ -610,7 +610,7 @@ constructor TDebugInfoSegments.Create;
 begin
   inherited Create;
 
-  FSegments := TObjectList<TDebugInfoSegment>.Create(True);
+  FSegments := TObjectDictionary<Cardinal, TDebugInfoSegment>.Create([doOwnsValues]);
   FNames := TDictionary<string, TDebugInfoSegment>.Create;
 end;
 
@@ -627,22 +627,15 @@ begin
   if (AIndex = 0) then
     raise EDebugInfo.CreateFmt('Invalid Segment index: %d', [AIndex]);
 
+  if (FSegments.ContainsKey(AIndex)) then
+    raise EDebugInfo.CreateFmt('Duplicate Segment index: %d', [AIndex]);
+
   if (FNames.ContainsKey(AName)) then
     raise EDebugInfo.CreateFmt('Duplicate Segment name: %s', [AName]);
 
-  // Index is 1-based
-  var ListIndex := integer(AIndex-1);
-
-  if (ListIndex < FSegments.Count) then
-  begin
-    if (FSegments[ListIndex] <> nil) then
-      raise EDebugInfo.CreateFmt('Duplicate Segment index: %d', [AIndex]);
-  end else
-    FSegments.Count := ListIndex+1;
-
   Result := TDebugInfoSegment.Create(Self, AIndex, AName, AClassType);
 
-  FSegments[ListIndex] := Result;
+  FSegments.Add(AIndex, Result);
   FNames.Add(AName, Result);
 end;
 
@@ -654,13 +647,10 @@ end;
 
 function TDebugInfoSegments.FindByIndex(AIndex: Cardinal): TDebugInfoSegment;
 begin
-  // Index is 1-based
-  if (AIndex <= 0) then
+  if (AIndex = 0) then
     raise EDebugInfo.CreateFmt('Invalid Segment index: %d', [AIndex]);
 
-  if (integer(AIndex) <= FSegments.Count) then
-    Result := FSegments[AIndex - 1]
-  else
+  if (not FSegments.TryGetValue(AIndex, Result)) then
     Result := nil;
 end;
 
@@ -671,20 +661,18 @@ end;
 
 function TDebugInfoSegments.GetEnumerator: TEnumerator<TDebugInfoSegment>;
 begin
-  Result := FSegments.GetEnumerator;
+  Result := FSegments.Values.GetEnumerator;
 end;
 
 function TDebugInfoSegments.GetSegment(AIndex: Cardinal): TDebugInfoSegment;
 begin
-  Result := FindByIndex(AIndex);
-
-  if (Result = nil) then
+  if (not FSegments.TryGetValue(AIndex, Result)) then
     raise EDebugInfo.CreateFmt('Segment index does not exist: %d', [AIndex]);
 end;
 
 function TDebugInfoSegments.FindByOffset(AOffset: TDebugInfoOffset): TDebugInfoSegment;
 begin
-  for Result in FSegments do
+  for Result in FSegments.Values do
     if (AOffset >= Result.Offset) and (AOffset < Result.Offset+Result.Size) then
       Exit;
 
@@ -693,7 +681,7 @@ end;
 
 function TDebugInfoSegments.FindByClassName(const AClassName: string): TDebugInfoSegment;
 begin
-  for Result in FSegments do
+  for Result in FSegments.Values do
     if (SameText(AClassName, Result.SegClassName)) then
       Exit;
 

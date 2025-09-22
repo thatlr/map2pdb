@@ -1582,8 +1582,9 @@ begin
     EmitLinkerSymbol;
 
     // Emit S_SECTION for all segments
-    for var Segment in FDebugInfo.Segments do
+    for var Segment in FDebugInfo.Segments do begin
       EmitSectionSymbol(Segment);
+    end;
 
   end else
   begin
@@ -2016,7 +2017,7 @@ begin
     FFiler.BeginFile;
 
 
-    FLinkerModule := TDebugInfoLinkerModule.Create(FDebugInfo, sLinkerModuleName, FDebugInfo.Segments[1], 0, 0);
+    FLinkerModule := TDebugInfoLinkerModule.Create(FDebugInfo, sLinkerModuleName, FDebugInfo.Segments.FindBySegmentID(1), 0, 0);
     try
 
       // Populate string list with all source file names. The list is emitted in WritePDBStrings.

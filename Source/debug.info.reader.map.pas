@@ -357,17 +357,17 @@ var
     Result := RequiredPos(SubStr, Reader.LineBuffer, Offset, ErrorMsg);
   end;
   
-  function ParseSegAndOffset(const Str: string; var StrOfs: integer; out SegmentID: Cardinal; out Offset: TDebugInfoOffset): boolean;
+  procedure ParseSegAndOffset(const Str: string; var StrOfs: integer; out SegmentID: Cardinal; out Offset: TDebugInfoOffset);
   begin
     SegmentID := HexToInt32(Str, StrOfs);
+
     inc(StrOfs);
-    if (Length(Str) < StrOfs) or (Str[StrOfs] <> ':') then begin
-      LineLogger.Error(Reader.LineNumber, 'Missing address/segment separator'+#13#10+Str);
-      Offset := 0;
-      exit(false);
-    end;
+    if (Length(Str) < StrOfs) or (Str[StrOfs] <> ':') then
+      raise EDebugInfo.CreateFmt('Line %d: Missing address/segment separator:'#13#10'  %s', [Reader.LineNumber, Str]);
+
     Offset := HexToInt64(Str, StrOfs);
-    exit(true);
+
+    //Writeln('SegmentID=', IntToHex(SegmentID, 4), ' Offset=', IntToHex(Offset, 8));
   end;
 
 begin
@@ -451,7 +451,7 @@ begin
           LineLogger.Warning(Reader.LineNumber, 'Calculated segment offset assigned: %s [%.4X:%.16X]', [SegmentName, SegmentID, Offset]);
         end;
 
-        ConflictingSegment := DebugInfo.Segments.FindByIndex(SegmentID);
+        ConflictingSegment := DebugInfo.Segments.FindBySegmentID(SegmentID);
         if (ConflictingSegment <> nil) then
         begin
           LineLogger.Warning(Reader.LineNumber, 'Duplicate segment index: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
@@ -463,35 +463,31 @@ begin
         end;
       end;
 
-      if Size <> 0 then begin
+      var SegmentClass := TDebugInfoSegment.GuessClassType(ClassName);
+      var Segment := DebugInfo.Segments.Add(SegmentID, SegmentName, SegmentClass);
 
-        var SegmentClass := TDebugInfoSegment.GuessClassType(ClassName);
-        var Segment := DebugInfo.Segments.Add(SegmentID, SegmentName, SegmentClass);
+      Segment.Offset := Offset;
+      Segment.Size := Size;
+      Segment.SegClassName := ClassName;
 
-        Segment.Offset := Offset;
-        Segment.Size := Size;
-        Segment.SegClassName := ClassName;
+      // We previously ignored empty segments. E.g.:
+      //   "0005:00000000 00000000H .tls                    TLS"
+      //   "0006:00400000 00000000H .pdata                  PDATA"
+      // but we need to allow them so symbols or lines referencing the segments doesn't cause errors. E.g.:
+      //   "0005:00000000       OtlCommon.Utils.LastThreadName"
+      //   "0005:00000100       SysInit.TlsLast"
+      if (Size = 0) then
+        LineLogger.Warning(Reader.LineNumber, 'Empty segment: %s [%.4d:%.16X]', [SegmentName, SegmentID, Segment.Offset]);
 
-        // We previously ignored empty segments. E.g.:
-        //   "0005:00000000 00000000H .tls                    TLS"
-        //   "0006:00400000 00000000H .pdata                  PDATA"
-        // but we need to allow them so symbols or lines referencing the segments doesn't cause errors. E.g.:
-        //   "0005:00000000       OtlCommon.Utils.LastThreadName"
-        //   "0005:00000100       SysInit.TlsLast"
-        if (Size = 0) then
-          LineLogger.Warning(Reader.LineNumber, 'Empty segment: %s [%.4d:%.16X]', [SegmentName, SegmentID, Segment.Offset]);
+      // Check for non-fatal overlapping segments (specifically .tls):
+      //   "0001:0000000000401000 006CD7B8H .text                   CODE"
+      //   "0004:0000000000400000 00008260H .tls                    TLS"
+      // Fatal overlaps have already been checked when we assigned Segment.Offset above.
+      var OverlappingSegment := Segment.FindOverlap;
 
-        // Check for non-fatal overlapping segments (specifically .tls):
-        //   "0001:0000000000401000 006CD7B8H .text                   CODE"
-        //   "0004:0000000000400000 00008260H .tls                    TLS"
-        // Fatal overlaps have already been checked when we assigned Segment.Offset above.
-        var OverlappingSegment := Segment.FindOverlap;
-
-        if (OverlappingSegment <> nil) then
-          LineLogger.Warning(Reader.LineNumber, 'Overlapping segments: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
-            [Segment.Name, Segment.Index, Segment.Offset, OverlappingSegment.Name, OverlappingSegment.Index, OverlappingSegment.Offset]);
-
-      end;
+      if (OverlappingSegment <> nil) then
+        LineLogger.Warning(Reader.LineNumber, 'Overlapping segments: %s [%.4X:%.16X] and %s [%.4X:%.16X]',
+          [Segment.Name, Segment.Index, Segment.Offset, OverlappingSegment.Name, OverlappingSegment.Index, OverlappingSegment.Offset]);
 
       Reader.NextLine;
     end;
@@ -589,7 +585,7 @@ begin
         Segment := DebugInfo.Segments.FindByClassName(ClassName);
 
       if (Segment = nil) then
-        Segment := DebugInfo.Segments.FindByIndex(SegmentID);
+        Segment := DebugInfo.Segments.FindBySegmentID(SegmentID);
 
       if (Segment = nil) then
         LineLogger.Error(Reader.LineNumber, 'Unknown segment: %.4d (%s)'#13#10'%s', [SegmentID, ClassName, Reader.LineBuffer]);
@@ -684,7 +680,7 @@ begin
 
 	  ParseSegAndOffset(Address, n, SegmentID, Offset);
 
-      var Segment := DebugInfo.Segments.FindByIndex(SegmentID);
+      var Segment := DebugInfo.Segments.FindBySegmentID(SegmentID);
       if (Segment = nil) then
         LineLogger.Error(Reader.LineNumber, 'Unknown segment index: %.4d'#13#10'%s', [SegmentID, Reader.LineBuffer]);
 

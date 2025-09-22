@@ -319,14 +319,14 @@ begin
         if (FindCmdLineSwitch('blocksize', Param, True, [clstValueAppended])) and (TryStrToInt(Param, BlockSize)) then
           Logger.Info('MSF block size: %.0n bytes', [BlockSize * 1.0]);
 
-      var Writer := WriterClasses[TargetType].Create(BlockSize);
-      try
+        var Writer := WriterClasses[TargetType].Create(BlockSize);
+        try
 
-        Writer.SaveToFile(TargetFilename, DebugInfo);
+          Writer.SaveToFile(TargetFilename, DebugInfo);
 
-      finally
-        Writer.Free;
-      end;
+        finally
+          Writer.Free;
+        end;
 
       end;
 

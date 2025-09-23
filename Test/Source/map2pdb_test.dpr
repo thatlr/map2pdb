@@ -20,13 +20,29 @@ uses
   TextTestRunner,
   DUnitTestRunner,
   Forms,
+  debug.info.log,
   TestFileReader in 'TestFileReader.pas',
   FileTestFramework in '..\DUnit\FileTestFramework.pas',
   TestFileWriter in 'TestFileWriter.pas';
 
 {$R *.RES}
 
+type
+  TDebugInfoUnitTestLogger = class(TInterfacedObject, IDebugInfoLogger)
+  protected
+    // IDebugInfoLogger
+    procedure Log(Category: TDebugInfoLogCategory; LogModule: TDebugInfoLogModule; const Msg: string);
+  end;
+
+procedure TDebugInfoUnitTestLogger.Log(Category: TDebugInfoLogCategory; LogModule: TDebugInfoLogModule; const Msg: string);
 begin
+  if (Category = lcFatal) then
+    raise ETestFailure.Create(Msg);
+end;
+
+begin
+  RegisterDebugInfoLogger(TDebugInfoUnitTestLogger.Create);
+
   Application.Initialize;
   if IsConsole then
     with TextTestRunner.RunRegisteredTests do

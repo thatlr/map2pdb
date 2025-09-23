@@ -165,6 +165,8 @@ type
 
 procedure TDebugInfoNullLogger.Log(Category: TDebugInfoLogCategory; LogModule: TDebugInfoLogModule; const Msg: string);
 begin
+  if (Category = lcFatal) then
+    Abort;
 end;
 
 var

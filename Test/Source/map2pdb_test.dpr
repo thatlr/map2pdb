@@ -19,6 +19,7 @@ uses
   GUITestRunner,
   TextTestRunner,
   DUnitTestRunner,
+  SysUtils,
   Forms,
   debug.info.log,
   TestFileReader in 'TestFileReader.pas',
@@ -37,7 +38,7 @@ type
 procedure TDebugInfoUnitTestLogger.Log(Category: TDebugInfoLogCategory; LogModule: TDebugInfoLogModule; const Msg: string);
 begin
   if (Category = lcFatal) then
-    raise ETestFailure.Create(Msg);
+    raise Exception.Create(Msg);
 end;
 
 begin

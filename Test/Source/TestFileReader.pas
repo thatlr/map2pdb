@@ -4,6 +4,7 @@ interface
 
 uses
   Classes, Types,
+  TestFramework,
   FileTestFramework,
   debug.info,
   debug.info.reader;
@@ -26,13 +27,29 @@ type
     procedure TestLoadFromFile;
   end;
 
+  TTestFileReaderErrors = class(TTestFileReader)
+  protected
+    procedure RunTest(TestResult: TTestResult); override;
+  end;
+
+type
+  TFolderTestSuiteSkipErrors = class(TFolderTestSuite)
+  protected
+    procedure ProcessFolder(Suite: ITestSuite; TestClass: TFileTestCaseClass; const NameOfMethod, Path, FileMask: string; Recursive: Boolean); override;
+  end;
+
+type
+  TFolderTestSuiteOnlyErrors = class(TFolderTestSuite)
+  protected
+    procedure ProcessFolder(Suite: ITestSuite; TestClass: TFileTestCaseClass; const NameOfMethod, Path, FileMask: string; Recursive: Boolean); override;
+  end;
+
 implementation
 
 uses
   Windows,
   SysUtils,
   IOUtils,
-  TestFramework,
   debug.info.reader.map,
   debug.info.reader.test,
   debug.info.reader.jdbg;
@@ -110,8 +127,61 @@ begin
 end;
 
 
+{ TFolderTestSuiteSkipErrors }
+
+procedure TFolderTestSuiteSkipErrors.ProcessFolder(Suite: ITestSuite; TestClass: TFileTestCaseClass; const NameOfMethod, Path,
+  FileMask: string; Recursive: Boolean);
+begin
+  if SameText(TPath.GetFileName(Path), 'errors') then
+    exit;
+
+  inherited;
+end;
+
+{ TFolderTestSuiteOnlyErrors }
+
+procedure TFolderTestSuiteOnlyErrors.ProcessFolder(Suite: ITestSuite; TestClass: TFileTestCaseClass; const NameOfMethod, Path,
+  FileMask: string; Recursive: Boolean);
+begin
+  if SameText(TPath.GetFileName(Path), 'errors') then
+  begin
+    inherited;
+    exit;
+  end;
+
+  if Recursive then
+    for var Folder in TDirectory.GetDirectories(Path) do
+      ProcessFolder(Suite, TestClass, NameOfMethod, Folder, FileMask, true);
+end;
+
+{ TTestFileReaderErrors }
+
+procedure TTestFileReaderErrors.RunTest(TestResult: TTestResult);
+begin
+  try
+
+    inherited;
+
+    Fail('Passed without expected error: '+TPath.GetFileNameWithoutExtension(TestFileName));
+
+  except
+    on E: Exception do
+    begin
+      var Msg := E.Message.ToLower;
+      Msg := StringReplace(Msg, '/', '-', [rfReplaceAll]);
+      Msg := StringReplace(Msg, '"', '', [rfReplaceAll]);
+      if (Msg.Contains(TPath.GetFileNameWithoutExtension(TestFileName).ToLower)) then
+        Check(True)
+      else
+        raise;
+    end;
+  end;
+end;
+
 initialization
-  var TestSuite := TFolderTestSuite.Create('Load map files', TTestFileReader, '..\..\..\Data', '*.*', True);
+  var TestSuite: TTestSuite := TFolderTestSuiteSkipErrors.Create('Load map files', TTestFileReader, '..\..\..\Data', '*.*', True);
+  RegisterTest(TestSuite);
+  TestSuite := TFolderTestSuiteOnlyErrors.Create('Reader errors', TTestFileReaderErrors, '..\..\..\Data', '*.*', True);
   RegisterTest(TestSuite);
 end.
 

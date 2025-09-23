@@ -64,7 +64,7 @@ begin
 end;
 
 initialization
-  var TestSuite := TFolderTestSuite.Create('Write PDB files', TTestFileWriter, '..\..\..\Data', '*.*', True);
+  var TestSuite := TFolderTestSuiteSkipErrors.Create('Write PDB files', TTestFileWriter, '..\..\..\Data', '*.*', True);
   RegisterTest(TestSuite);
 end.
 

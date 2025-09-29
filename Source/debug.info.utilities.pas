@@ -101,12 +101,12 @@ begin
           begin
             Inc(ModulesIncludeEliminateCount);
             Inc(SymbolsIncludeEliminateCount, Module.Symbols.Count);
-            Logger.Debug('Include filter eliminated module: %s', [Module.Name])
+            Logger.Debug('Include filter eliminated module: [%.4X] %s', [Module.Segment.Index, Module.Name])
           end else
           begin
             Inc(ModulesExcludeEliminateCount);
             Inc(SymbolsExcludeEliminateCount, Module.Symbols.Count);
-            Logger.Debug('Exclude filter eliminated module: %s', [Module.Name]);
+            Logger.Debug('Exclude filter eliminated module: [%.4X] %s', [Module.Segment.Index, Module.Name]);
           end;
 
           DebugInfo.Modules.Remove(Module);
@@ -142,12 +142,12 @@ begin
     if (Module.SourceFiles.Count = 0) then
     begin
       if (Module.SourceLines.Count = 0) then
-        Logger.Debug('Module has no source files: %s', [Module.Name])
+        Logger.Debug('Module has no source files: [%.4X] %s', [Module.Segment.Index, Module.Name])
       else
-        Logger.Debug('Module has source lines but no source file: %s', [Module.Name]);
+        Logger.Debug('Module has source lines but no source file: [%.4X] %s', [Module.Segment.Index, Module.Name]);
     end else
     if (Module.SourceLines.Count = 0) then
-      Logger.Debug('Module has source files but no source lines: %s', [Module.Name]);
+      Logger.Debug('Module has source files but no source lines: [%.4X] %s', [Module.Segment.Index, Module.Name]);
   end;
 end;
 

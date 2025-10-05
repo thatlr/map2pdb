@@ -77,22 +77,24 @@ type
   end;
 
   TDebugInfoSegments = class
-  strict private
-    FSegments: TObjectList<TDebugInfoSegment>;
+  private
+    FSegments: TDictionary<Cardinal, TDebugInfoSegment>;
     FNames: TDictionary<string, TDebugInfoSegment>;
-  strict protected
+  protected
     function GetCount: integer;
+    function GetSegment(AIndex: Cardinal): TDebugInfoSegment;
   public
     constructor Create;
     destructor Destroy; override;
 
-    function Add(SegmentID: Cardinal; const AName: string; AClassType: TDebugInfoSegmentClass = sctDATA): TDebugInfoSegment;
-    function FindBySegmentID(SegmentID: Cardinal): TDebugInfoSegment;
+    function Add(AIndex: Cardinal; const AName: string; AClassType: TDebugInfoSegmentClass = sctDATA): TDebugInfoSegment;
+    function FindByIndex(AIndex: Cardinal): TDebugInfoSegment;
     function FindByName(const AName: string): TDebugInfoSegment;
     function FindByOffset(AOffset: TDebugInfoOffset): TDebugInfoSegment;
     function FindByClassName(const AClassName: string): TDebugInfoSegment;
 
     property Count: integer read GetCount;
+    property Segments[Index: Cardinal]: TDebugInfoSegment read GetSegment; default;
 
     function GetEnumerator: TEnumerator<TDebugInfoSegment>;
   end;
@@ -608,7 +610,7 @@ constructor TDebugInfoSegments.Create;
 begin
   inherited Create;
 
-  FSegments := TObjectList<TDebugInfoSegment>.Create(True);
+  FSegments := TObjectDictionary<Cardinal, TDebugInfoSegment>.Create([doOwnsValues]);
   FNames := TDictionary<string, TDebugInfoSegment>.Create;
 end;
 
@@ -620,20 +622,20 @@ begin
   inherited;
 end;
 
-function TDebugInfoSegments.Add(SegmentID: Cardinal; const AName: string; AClassType: TDebugInfoSegmentClass): TDebugInfoSegment;
+function TDebugInfoSegments.Add(AIndex: Cardinal; const AName: string; AClassType: TDebugInfoSegmentClass): TDebugInfoSegment;
 begin
-  if (SegmentID = 0) then
-    raise EDebugInfo.CreateFmt('Invalid Segment index: %d', [SegmentID]);
+  if (AIndex = 0) then
+    raise EDebugInfo.CreateFmt('Invalid Segment index: %d', [AIndex]);
+
+  if (FSegments.ContainsKey(AIndex)) then
+    raise EDebugInfo.CreateFmt('Duplicate Segment index: %d', [AIndex]);
 
   if (FNames.ContainsKey(AName)) then
     raise EDebugInfo.CreateFmt('Duplicate Segment name: %s', [AName]);
 
-  if Self.FindBySegmentID(SegmentID) <> nil then
-      raise EDebugInfo.CreateFmt('Duplicate Segment index: %d', [SegmentID]);
+  Result := TDebugInfoSegment.Create(Self, AIndex, AName, AClassType);
 
-  Result := TDebugInfoSegment.Create(Self, SegmentID, AName, AClassType);
-
-  FSegments.Add(Result);
+  FSegments.Add(AIndex, Result);
   FNames.Add(AName, Result);
 end;
 
@@ -643,15 +645,13 @@ begin
     Result := nil;
 end;
 
-function TDebugInfoSegments.FindBySegmentID(SegmentID: Cardinal): TDebugInfoSegment;
+function TDebugInfoSegments.FindByIndex(AIndex: Cardinal): TDebugInfoSegment;
 begin
-  if SegmentID = 0 then
-    raise EDebugInfo.CreateFmt('Invalid Segment index: %d', [SegmentID]);
+  if (AIndex = 0) then
+    raise EDebugInfo.CreateFmt('Invalid Segment index: %d', [AIndex]);
 
-  for Result in FSegments do begin
-    if Result.Index = SegmentID then exit;
-  end;
-  Result := nil;
+  if (not FSegments.TryGetValue(AIndex, Result)) then
+    Result := nil;
 end;
 
 function TDebugInfoSegments.GetCount: integer;
@@ -661,12 +661,18 @@ end;
 
 function TDebugInfoSegments.GetEnumerator: TEnumerator<TDebugInfoSegment>;
 begin
-  Result := FSegments.GetEnumerator;
+  Result := FSegments.Values.GetEnumerator;
+end;
+
+function TDebugInfoSegments.GetSegment(AIndex: Cardinal): TDebugInfoSegment;
+begin
+  if (not FSegments.TryGetValue(AIndex, Result)) then
+    raise EDebugInfo.CreateFmt('Segment index does not exist: %d', [AIndex]);
 end;
 
 function TDebugInfoSegments.FindByOffset(AOffset: TDebugInfoOffset): TDebugInfoSegment;
 begin
-  for Result in FSegments do
+  for Result in FSegments.Values do
     if (AOffset >= Result.Offset) and (AOffset < Result.Offset+Result.Size) then
       Exit;
 
@@ -675,7 +681,7 @@ end;
 
 function TDebugInfoSegments.FindByClassName(const AClassName: string): TDebugInfoSegment;
 begin
-  for Result in FSegments do
+  for Result in FSegments.Values do
     if (SameText(AClassName, Result.SegClassName)) then
       Exit;
 

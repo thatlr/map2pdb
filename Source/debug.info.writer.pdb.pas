@@ -2052,7 +2052,7 @@ begin
       FLayout.StreamTPI := WriteTPIStream;
 
 
-      // Write the Symbols (DBI), Globals (DBI) and Publics (DBI) streams - they must be writte before the DBI stream
+      // Write the Symbols (DBI), Globals (DBI) and Publics (DBI) streams - they must be written before the DBI stream
       Logger.Info('- Symbols stream');
       WriteSymbols;
 
